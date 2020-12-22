@@ -1,0 +1,189 @@
+#!/bin/sh
+
+readonly VERSION="0.0.1"
+readonly APP_NAME="herotate"
+
+# This is the file heroku-cli reads to source your user login
+readonly TARGET_CONFIG="${HOME}/.netrc"
+
+# Where our configs live
+readonly CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/${APP_NAME}"
+
+##
+# Log
+#
+# $@ messages
+##
+log() {
+  printf -- '[%s] %s\n' "${APP_NAME}" "$@"
+}
+
+##
+# Debug Log
+#
+# $@ messages
+##
+dlog() {
+  # Defined at call site
+  if [ -n "${DEBUG}" ]; then
+    printf -- '[%s] %s\n' "${APP_NAME}" "$@"
+  fi
+}
+
+##
+# Link a .netrc config from CONFIG_DIR to TARGET_CONFIG
+#
+# $1 config name
+##
+link_config_to_target() {
+  link_config__config="$1"
+  if [ -z "${link_config__config}" ]; then
+    log "Missing config name"
+    return 1
+  fi
+
+  if [ ! -e "${CONFIG_DIR}/${link_config__config}" ]; then
+    log "Missing config file: ${CONFIG_DIR}/${link_config__config}"
+    return 1
+  fi
+
+  ln -sf "${CONFIG_DIR}/${link_config__config}" "${TARGET_CONFIG}" || {
+    log "Unable to symlink config file ${CONFIG_DIR}/${link_config__config} to ${TARGET_CONFIG}"
+    return 1
+  }
+  log "Heroku config linked '${link_config__config}'"
+
+  return 0
+}
+
+##
+# If current TARGET_CONFIG is a real file, copy it to a config and symlink it
+##
+copy_real_netrc_to_config() {
+  if [ ! -e "${TARGET_CONFIG}" ]; then
+    dlog "Current .netrc does not exist, do nothing"
+    return 0
+  fi
+
+  if [ -L "${TARGET_CONFIG}" ]; then
+    dlog "Current .netrc is a symlink already, do nothing"
+    return 0
+  fi
+
+  copy_real__name="main"
+  log "Managing your existing heroku config as '${copy_real__name}'"
+  mv "${TARGET_CONFIG}" "${CONFIG_DIR}/${copy_real__name}" || {
+    log "Could not manage config: ${TARGET_CONFIG}"
+    return 1
+  }
+
+  link_config_to_target "${copy_real__name}" || return 1
+  unset copy_real__name
+  return 0
+}
+
+##
+# List configs
+##
+list_configs() {
+  for config in "${CONFIG_DIR}"/*; do
+    printf -- '\n'
+    printf -- 'Config: %s [%s]\n' "$(basename "${config}")" "${config}"
+    printf -- '==================\n'
+    printf -- '%s\n' "$(cat "${config}")"
+  done
+  return 0
+}
+
+##
+# Unlink config
+##
+unlink_config() {
+  if [ ! -e "${TARGET_CONFIG}" ]; then
+    log ".netrc does not exist at ${TARGET_CONFIG}"
+    return 1
+  fi
+
+  if [ ! -L "${TARGET_CONFIG}" ]; then
+    log "Current .netrc is not managed by ${APP_NAME}"
+    return 1
+  fi
+
+  rm -f "${TARGET_CONFIG}" || {
+    log "Failed to remove ${TARGET_CONFIG}"
+    return 1
+  }
+  log "Unlinked .netrc from ${TARGET_CONFIG}"
+
+  return 0
+}
+
+##
+# Print help
+##
+print_usage() {
+  printf -- '%s\n' "$(
+    cat <<EOF
+${APP_NAME} [${VERSION}]
+
+[Environment]
+CONFIG_DIR=${CONFIG_DIR}
+TARGET_CONFIG=${TARGET_CONFIG}
+
+[Commands]
+link <config>         Link a config from CONFIG_DIR to TARGET_CONFIG
+unlink                Unlink a config from TARGET_CONFIG
+list                  List all configs in CONFIG_DIR
+help                  This help
+EOF
+  )"
+  return 0
+}
+
+##
+# Main
+##
+main() {
+  log "${APP_NAME} ${VERSION}"
+
+  # Make the config directory
+  mkdir -p "${CONFIG_DIR}" || {
+    log "Unable to make config directory at: ${CONFIG_DIR}"
+    return 1
+  }
+
+  copy_real_netrc_to_config || return 1
+
+  # Commands
+  main__command="$1"
+  main__command_target="$2"
+
+  dlog "Launched with: '${main__command}' '${main__command_target}'"
+
+  if [ -z "${main__command}" ]; then
+    print_usage || return 1
+    return 0
+  fi
+
+  case "${main__command}" in
+  help)
+    print_usage || return 1
+    ;;
+  list)
+    list_configs || return 1
+    ;;
+  link)
+    link_config_to_target "${main__command_target}" || return 1
+    ;;
+  unlink)
+    unlink_config || return 1
+    ;;
+  *)
+    print_usage || return 1
+    ;;
+  esac
+  return 0
+}
+
+main "$@" || exit 1
+exit 0
