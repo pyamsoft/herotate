@@ -71,6 +71,13 @@ copy_real_netrc_to_config() {
   fi
 
   copy_real__name="main"
+  if [ -e "${CONFIG_DIR}/${copy_real__name}" ]; then
+    log "You already have a config named '${copy_real__name}'."
+    log "Please go into ${CONFIG_DIR} and rename the file from '${copy_real__name}' to something"
+    log "else to avoid it being overwritten."
+    return 0
+  fi
+
   log "Managing your existing heroku config as '${copy_real__name}'"
   mv "${TARGET_CONFIG}" "${CONFIG_DIR}/${copy_real__name}" || {
     log "Could not manage config: ${TARGET_CONFIG}"
