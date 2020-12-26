@@ -129,13 +129,18 @@ unlink_config() {
   return 0
 }
 
+print_version() {
+  printf -- '%s [%s] \n' "${APP_NAME}" "${VERSION}"
+  return 0
+}
+
 ##
 # Print help
 ##
 print_usage() {
+  print_version || return 1
   printf -- '%s\n' "$(
     cat <<EOF
-${APP_NAME} [${VERSION}]
 
 [Environment]
 CONFIG_DIR=${CONFIG_DIR}
@@ -155,8 +160,6 @@ EOF
 # Main
 ##
 main() {
-  log "${APP_NAME} ${VERSION}"
-
   # Make the config directory
   mkdir -p "${CONFIG_DIR}" || {
     log "Unable to make config directory at: ${CONFIG_DIR}"
@@ -177,8 +180,11 @@ main() {
   fi
 
   case "${main__command}" in
-  help)
+  help | -h | --help)
     print_usage || return 1
+    ;;
+  version | -v | --version)
+    print_version || return 1
     ;;
   list)
     list_configs || return 1
@@ -191,6 +197,7 @@ main() {
     ;;
   *)
     print_usage || return 1
+    return 1
     ;;
   esac
   return 0
